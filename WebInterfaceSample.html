@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Sensors Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            min-height: 100vh;
+            padding: 20px;
+            color: white;
+        }
+
+        .dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .last-updated {
+            color: #b8d4ff;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .sensors-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+
+        .sensor-card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sensor-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+        }
+
+        .sensor-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+
+        .sensor-card h3 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: #b8d4ff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .sensor-icon-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sensor-value {
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+            margin-bottom: 5px;
+        }
+
+        .sensor-unit {
+            font-size: 1.1rem;
+            color: #b8d4ff;
+            margin-left: 8px;
+        }
+
+        .status-indicator {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s infinite;
+            flex-shrink: 0;
+        }
+
+        .status-good {
+            background-color: #4ade80;
+            box-shadow: 0 0 10px rgba(74, 222, 128, 0.3);
+        }
+
+        .status-warning {
+            background-color: #fbbf24;
+            box-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+        }
+
+        .status-danger {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+
+        .flame-sensor {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.1));
+        }
+
+        .temp-sensor {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.1));
+        }
+
+        .gas-sensor {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(147, 51, 234, 0.1));
+        }
+
+        .error-message {
+            text-align: center;
+            color: #ef4444;
+            padding: 30px;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            font-size: 1.1rem;
+            grid-column: 1 / -1;
+        }
+
+        .loading {
+            text-align: center;
+            color: #b8d4ff;
+            padding: 40px;
+            font-size: 1.2rem;
+            grid-column: 1 / -1;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #b8d4ff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #b8d4ff;
+        }
+
+        .connection-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #4ade80;
+            animation: pulse 2s infinite;
+        }
+
+        .connection-indicator.disconnected {
+            background-color: #ef4444;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.2rem;
+            }
+
+            .sensors-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .sensor-card {
+                padding: 20px;
+            }
+
+            .sensor-value {
+                font-size: 1.8rem;
+            }
+
+            body {
+                padding: 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1.8rem;
+            }
+
+            .sensor-card {
+                padding: 15px;
+            }
+
+            .sensor-value {
+                font-size: 1.6rem;
+            }
+
+            .sensor-card h3 {
+                font-size: 1rem;
+            }
+
+            body {
+                padding: 10px;
+            }
+        }
+
+        @media (min-width: 1400px) {
+            .sensors-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        .ip-input-container {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+            gap: 10px;
+            }
+            .ip-input-container input {
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            min-width: 280px;
+            font-size: 1rem;
+            }
+            .ip-input-container button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            background: #4ade80;
+            color: #fff;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+            }
+            .ip-input-container button:hover {
+            background: #22c55e;
+            }
+    </style>
+</head>
+<body>
+  <div class="dashboard">
+    <div class="header">
+      <h1>📊 ESP32 Sensors Dashboard</h1>
+      <div class="last-updated" id="lastUpdated">Waiting for IP...</div>
+      <div class="connection-status">
+        <span class="connection-indicator" id="connectionIndicator"></span>
+        <span id="connectionStatus">Not connected</span>
+      </div>
+    </div>
+
+    <!-- Input for ESP32 IP -->
+    <div class="ip-input-container">
+      <input type="text" id="esp32Url" placeholder="Enter ESP32 URL e.g. http://192.168.1.8/sensors">
+      <button onclick="setESP32Url()">Connect</button>
+    </div>
+
+    <div class="sensors-grid" id="sensorsContainer">
+      <div class="loading">
+        Please enter ESP32 IP above to connect...
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let sensorData = {};
+    let isConnected = false;
+    let esp32Url = "";
+    let fetchInterval;
+
+    function updateLastUpdated() {
+      const now = new Date();
+      document.getElementById('lastUpdated').textContent =
+        `Last updated: ${now.toLocaleTimeString()}`;
+    }
+
+    function updateConnectionStatus(connected) {
+      const indicator = document.getElementById('connectionIndicator');
+      const status = document.getElementById('connectionStatus');
+
+      if (connected) {
+        indicator.className = 'connection-indicator';
+        status.textContent = 'Connected to sensors';
+        isConnected = true;
+      } else {
+        indicator.className = 'connection-indicator disconnected';
+        status.textContent = 'Disconnected from sensors';
+        isConnected = false;
+      }
+    }
+
+    function getStatusClass(sensorType, value) {
+      switch(sensorType) {
+        case 'flame':
+          return value === "No flame" ? 'status-good' : 'status-danger';
+        case 'gas':
+          return value === "No gas" ? 'status-good' : 'status-danger';
+        case 'temp':
+          const temp = parseFloat(value);
+          if (temp < 25) return 'status-good';
+          if (temp < 35) return 'status-warning';
+          return 'status-danger';
+        default:
+          return 'status-good';
+      }
+    }
+
+    function createSensorCard(title, value, unit, icon, sensorType, className) {
+      const statusClass = getStatusClass(sensorType, value);
+      return `
+        <div class="sensor-card ${className}">
+          <h3>
+            <div class="sensor-icon-title">
+              <span>${icon}</span>
+              <span>${title}</span>
+            </div>
+            <span class="status-indicator ${statusClass}"></span>
+          </h3>
+          <div class="sensor-value">
+            ${value}
+            ${unit ? `<span class="sensor-unit">${unit}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function updateSensorDisplay(data) {
+      const container = document.getElementById('sensorsContainer');
+
+      if (!data) {
+        container.innerHTML = '<div class="error-message">❌ Failed to load sensor data. Check connection.</div>';
+        updateConnectionStatus(false);
+        return;
+      }
+
+      updateConnectionStatus(true);
+
+      const sensorCards = [
+        createSensorCard('Flame Detection', data.flame || 'Unknown', '', '🔥', 'flame', 'flame-sensor'),
+        createSensorCard('Ambient Temperature', data.ambientTemp || '0', '°C', '🌡️', 'temp', 'temp-sensor'),
+        createSensorCard('Object Temperature', data.objectTemp || '0', '°C', '📏', 'temp', 'temp-sensor'),
+        createSensorCard('Gas Detection', data.mq2Digital || 'Unknown', '', '💨', 'gas', 'gas-sensor'),
+        createSensorCard('Gas Level', data.mq2Analog || '0', 'ppm', '📈', 'gas', 'gas-sensor')
+      ];
+
+      container.innerHTML = sensorCards.join('');
+    }
+
+    async function fetchSensorData() {
+      if (!esp32Url) return;
+      try {
+        const response = await fetch(esp32Url);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        sensorData = data;
+        updateSensorDisplay(data);
+        updateLastUpdated();
+      } catch (error) {
+        console.error('Error fetching sensor data:', error);
+        updateSensorDisplay(null);
+        document.getElementById('lastUpdated').textContent =
+          `Connection error: ${error.message}`;
+      }
+    }
+
+    // Called when user presses Connect
+    function setESP32Url() {
+      const inputUrl = document.getElementById('esp32Url').value.trim();
+      if (!inputUrl) return alert("Please enter ESP32 URL");
+
+      esp32Url = inputUrl;
+
+      clearInterval(fetchInterval);
+      fetchSensorData();
+      fetchInterval = setInterval(fetchSensorData, 1000);
+    }
+  </script>
+</body>
+</html>
